@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+venv/
+env/
+
+# Local configs and generated forecast outputs may contain business data.
+*_config.yaml
+!forecast_config_template.yaml
+forecast_data/
+outputs/
+*.xlsx
+*.xls
+*.csv
+*.png
+*.html
+*.md.tmp
+

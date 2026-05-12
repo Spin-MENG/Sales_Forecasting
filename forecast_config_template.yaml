@@ -1,0 +1,148 @@
+# 新品销量预测标准配置模板
+#
+# 使用方式：
+# 1. 复制本文件为具体产品配置，例如 model_xxx_global_ex_us_config.yaml
+# 2. 填写 paths / target_product / anchor_products
+# 3. 运行：python3 forecast_tool.py --config your_config.yaml
+#
+# 说明：
+# - 德国销量是必需的，因为当前全球非美模型依赖 DE/非美占比反推。
+# - 美国销量不是必需的；如果没有美国数据，工具会按“无美国数据”继续计算非美口径。
+# - 每个锚点仍需要数值 weight；auto 模式会计算 auto_weight，但报告也会展示 manual weight。
+
+paths:
+  output_dir: /path/to/output_dir
+  base_data_dir: /path/to/anchor_excel_dir
+  de_forecast_csv: /path/to/de_forecast.csv
+
+output:
+  # 输出文件会使用：{prefix}_forecast_{version_slug}.csv
+  # 以及 {prefix}_method_{version_slug}.md 等命名。
+  prefix: new_product_global_ex_us
+  version_slug: v1_0
+
+excel:
+  sheet_name: 销量
+  country_column: 国家
+  store_column: 店铺
+  us_country: 美国
+  de_country: 德国
+  # DE/非美占比异常阈值。超出范围会提示检查国家销量是否漏填。
+  de_non_us_share_min: 0.03
+  de_non_us_share_max: 0.60
+
+monte_carlo:
+  n: 20000
+  seed: 7200
+  share_clip_min: 0.05
+  share_clip_max: 0.45
+
+anchor_weighting:
+  mode: auto   # manual or auto
+  factors:
+    role: 0.30
+    product_fit: 0.35
+    recency: 0.15
+    sample_window: 0.10
+    data_quality: 0.10
+  product_fit_factors:
+    category: 0.10
+    wifi_standard: 0.25
+    band_type: 0.25
+    price: 0.25
+    positioning: 0.15
+
+forecast:
+  version: V1.0
+  de_source_label: V1.0
+  generated_date: 2026-05-12
+  scope: 全球除美国外
+  regions:
+    - DE
+    - EU
+    - UK
+    - AU
+    - CA
+    - JP
+    - ROW
+  timeline_events:
+    - m: 1
+      type: launch
+      label: M1 上市
+      detail: 新品上市，评论和算法权重从零开始累积
+    - m: 5
+      type: promotion
+      label: BF Y1
+      detail: 首年 Black Friday，验证首轮大促响应
+    - m: 13
+      type: promotion
+      label: PD Y2
+      detail: 第二年 Prime Day，通常是 Y2 关键峰值月
+    - m: 17
+      type: promotion
+      label: BF Y2
+      detail: 第二年 Black Friday，验证第二轮大促响应
+
+target_product:
+  name: NEW_PRODUCT
+  category: dual_band_wifi7
+  launch_date: 2026-07
+  msrp: 179.99
+  expected_avg_price: 159.99
+  wifi_standard: wifi7
+  band_type: dual_band
+  positioning: mid
+  target_regions:
+    - DE
+    - EU
+    - UK
+    - AU
+    - CA
+    - JP
+    - ROW
+
+anchor_products:
+  - name: ANCHOR_RECENT
+    label: Anchor Recent (YYYY-MM~YYYY-MM)
+    category: dual_band_wifi6
+    wifi_standard: wifi6
+    band_type: dual_band
+    positioning: mid
+    avg_price: 139.99
+    role: direct_predecessor_recent
+    data_source: internal_sales
+    # 可以写绝对路径，也可以写相对 base_data_dir 的文件名。
+    file: anchor_recent_sales.xlsx
+    # region_sales_file 也可使用；与 file 二选一。
+    # region_sales_file: anchor_recent_sales.xlsx
+    weight: 0.5
+    start_month: 2025-11
+    end_month: 2026-04
+
+  - name: ANCHOR_HISTORY
+    label: Anchor History (YYYY-MM~YYYY-MM)
+    category: dual_band_wifi6
+    wifi_standard: wifi6
+    band_type: dual_band
+    positioning: mid
+    avg_price: 139.99
+    role: direct_predecessor_history
+    data_source: internal_sales
+    file: anchor_history_sales.xlsx
+    weight: 0.3
+    start_month: 2024-01
+    end_month: 2025-12
+
+  - name: ANCHOR_HIGH_END
+    label: Anchor High End (YYYY-MM~YYYY-MM)
+    category: tri_band_wifi7_high
+    wifi_standard: wifi7
+    band_type: tri_band
+    positioning: high
+    avg_price: 249.99
+    role: same_generation_high_end
+    data_source: internal_sales
+    file: anchor_high_end_sales.xlsx
+    weight: 0.2
+    start_month: 2025-07
+    end_month: 2026-04
