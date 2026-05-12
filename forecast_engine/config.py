@@ -24,6 +24,24 @@ def validate_config(config):
 
     target_product = get_target_product(config)
     _validate_product_fields(errors, target_product, "目标产品")
+    de_mode = _get_de_forecast_mode(config)
+    if de_mode not in ("csv", "hybrid_de"):
+        errors.append("de_forecast_model.mode 只能是 csv 或 hybrid_de。")
+    if de_mode == "csv" and not config.get("paths", {}).get("de_forecast_csv"):
+        errors.append("DE 预测模式为 csv，但 paths.de_forecast_csv 为空。")
+    if de_mode == "hybrid_de":
+        de_model = config.get("de_forecast_model", {})
+        if not (de_model.get("state_json") or config.get("paths", {}).get("de_anchor_state_json")):
+            errors.append("DE 预测模式为 hybrid_de，但缺少 de_forecast_model.state_json。")
+        if not (de_model.get("launch_month") or target_product.get("launch_date")):
+            errors.append("DE 预测模式为 hybrid_de，但缺少 launch_month / target_product.launch_date。")
+        if not de_model.get("steady_anchors"):
+            errors.append("DE 预测模式为 hybrid_de，但缺少 steady_anchors。")
+        for idx, anchor in enumerate(de_model.get("steady_anchors") or [], start=1):
+            label = anchor.get("label") or anchor.get("key") or f"DE 稳态锚点 {idx}"
+            for field in ("key", "weight", "v1_factor", "v2_factor", "v3_factor"):
+                if field not in anchor:
+                    errors.append(f"{label} 缺少 {field}，无法计算 DE 稳态。")
 
     total_weight = 0
     for idx, product in enumerate(anchor_products, start=1):
@@ -72,3 +90,10 @@ def resolve_path(path_value, base_dir=None):
     if base_dir is None:
         return path
     return Path(base_dir) / path
+
+
+def _get_de_forecast_mode(config):
+    mode = config.get("de_forecast_model", {}).get("mode")
+    if mode:
+        return str(mode).lower()
+    return "csv" if config.get("paths", {}).get("de_forecast_csv") else "hybrid_de"

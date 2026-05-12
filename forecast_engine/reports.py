@@ -23,7 +23,10 @@ def get_output_settings(config, target_product):
     default_prefix = f"{product_name.lower()}_global_ex_us"
     prefix = output.get("prefix", default_prefix)
     version_slug = output.get("version_slug") or slugify_version(forecast.get("version", "v1"))
-    de_source_label = forecast.get("de_source_label", "DE input")
+    de_source_label = forecast.get("de_source_label")
+    if not de_source_label:
+        mode = str(config.get("de_forecast_model", {}).get("mode", "")).lower()
+        de_source_label = "Hybrid DE" if mode == "hybrid_de" else "DE input"
     return {
         "prefix": prefix,
         "version_slug": version_slug,

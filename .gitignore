@@ -13,7 +13,8 @@ outputs/
 *.xlsx
 *.xls
 *.csv
+*_state.json
+de_anchors_state.json
 *.png
 *.html
 *.md.tmp
-

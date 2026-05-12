@@ -4,7 +4,6 @@
 基于配置中的 DE 月度三档预测，按锚点产品的 "DE / 非美全球" 销售占比反推。
 """
 import argparse
-import csv
 import sys
 from pathlib import Path
 
@@ -14,6 +13,11 @@ from forecast_engine.config import (
     get_target_product,
     load_config,
     resolve_path,
+)
+from forecast_engine.de_hybrid import (
+    generate_hybrid_de_forecast,
+    get_de_forecast_mode,
+    read_de_forecast_csv,
 )
 from forecast_engine.monte_carlo import simulate_multiplier_distribution
 from forecast_engine.scoring import calculate_anchor_scores
@@ -38,7 +42,10 @@ def main():
     TARGET_PRODUCT = get_target_product(CONFIG)
     OUT = resolve_path(CONFIG["paths"]["output_dir"])
     BASE = resolve_path(CONFIG["paths"]["base_data_dir"])
-    DE_FORECAST_CSV = resolve_path(CONFIG["paths"]["de_forecast_csv"])
+    DE_FORECAST_MODE = get_de_forecast_mode(CONFIG)
+    DE_FORECAST_CSV = None
+    if DE_FORECAST_MODE == "csv":
+        DE_FORECAST_CSV = resolve_path(CONFIG["paths"]["de_forecast_csv"])
     N_MONTE_CARLO = int(CONFIG["monte_carlo"].get("n", 20000))
     RANDOM_SEED = int(CONFIG["monte_carlo"].get("seed", 7200))
     SHARE_CLIP_MIN = float(CONFIG["monte_carlo"].get("share_clip_min", 0.05))
@@ -56,7 +63,10 @@ def main():
     print(f"读取配置: {CONFIG_PATH}")
     print(f"目标产品: {TARGET_PRODUCT.get('name', 'unknown')}")
     print(f"输出目录: {OUT}")
-    print(f"DE forecast: {DE_FORECAST_CSV}")
+    if DE_FORECAST_CSV:
+        print(f"DE forecast: {DE_FORECAST_CSV}")
+    else:
+        print("DE forecast: hybrid_de（由 Bass + Opening + Seasonal/Pulse + DE 锚点稳态生成）")
     print(f"预测范围区域: {', '.join(TARGET_PRODUCT.get('target_regions') or REGIONS)}")
     print(f"锚点权重模式: {WEIGHT_MODE}")
     
@@ -150,23 +160,27 @@ def main():
     print(f"  销量口径 multiplier P10/P50/P90 = {mult_p10:.2f}× / {mult_p50:.2f}× / {mult_p90:.2f}×")
     
     print("\n" + "="*70)
-    print(f"第三步：读取 {CONFIG['forecast'].get('de_source_label', 'DE input')} {TARGET_PRODUCT.get('name', '目标产品')} DE 预测")
-    print("="*70)
-    de_forecast = []
-    with open(DE_FORECAST_CSV) as f:
-        reader = csv.reader(f)
-        for r in reader:
-            if not r or len(r) < 11: continue
-            if r[0].startswith('#') or r[0] in ('M', '', 'cum_Y1', 'cum_M18'): continue
-            try:
-                m = int(r[0])
-                de_forecast.append({
-                    "M": m, "cal": r[1],
-                    "v1_low": float(r[2]), "v1_mid": float(r[3]), "v1_high": float(r[4]),
-                    "v2_low": float(r[5]), "v2_mid": float(r[6]), "v2_high": float(r[7]),
-                    "v3_low": float(r[8]), "v3_mid": float(r[9]), "v3_high": float(r[10]),
-                })
-            except (ValueError, IndexError): continue
+    if DE_FORECAST_MODE == "csv":
+        print(f"第三步：读取 {CONFIG['forecast'].get('de_source_label', 'DE input')} {TARGET_PRODUCT.get('name', '目标产品')} DE 预测")
+        print("="*70)
+        de_forecast = read_de_forecast_csv(DE_FORECAST_CSV)
+    else:
+        print(f"第三步：生成 {CONFIG['forecast'].get('de_source_label', 'Hybrid DE')} {TARGET_PRODUCT.get('name', '目标产品')} DE 预测")
+        print("="*70)
+        de_forecast, de_diagnostics = generate_hybrid_de_forecast(CONFIG, TARGET_PRODUCT, resolve_path)
+        print(f"DE Hybrid state: {de_diagnostics['state_json']}")
+        print(
+            "DE 稳态: "
+            f"V1={de_diagnostics['steady']['v1']:.0f}, "
+            f"V2={de_diagnostics['steady']['v2']:.0f}, "
+            f"V3={de_diagnostics['steady']['v3']:.0f}"
+        )
+        print("DE 稳态锚点贡献（V2）:")
+        for item in de_diagnostics["contributions"]:
+            print(
+                f"  {item['label']}: 近{de_diagnostics['recent_n']}月均={item['avg_recent']:.0f}, "
+                f"w={item['weight']:.2f}, factor={item['v2_factor']:.2f}, 贡献={item['v2_contribution']:.1f}"
+            )
     
     print(f"读取 {len(de_forecast)} 行 {CONFIG['forecast'].get('de_source_label', 'DE input')} DE 月度预测")
     print(f"  V2_mid Y1 = {sum(r['v2_mid'] for r in de_forecast[:12]):,.0f}")

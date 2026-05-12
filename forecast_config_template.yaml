@@ -1,25 +1,89 @@
 # 新品销量预测标准配置模板
 #
 # 使用方式：
-# 1. 复制本文件为具体产品配置，例如 model_xxx_global_ex_us_config.yaml
-# 2. 填写 paths / target_product / anchor_products
+# 1. 复制本文件为具体产品配置，例如 model_xxx_config.yaml
+# 2. 填写 paths / target_product / de_forecast_model / anchor_products
 # 3. 运行：python3 forecast_tool.py --config your_config.yaml
 #
 # 说明：
-# - 德国销量是必需的，因为当前全球非美模型依赖 DE/非美占比反推。
-# - 美国销量不是必需的；如果没有美国数据，工具会按“无美国数据”继续计算非美口径。
-# - 每个锚点仍需要数值 weight；auto 模式会计算 auto_weight，但报告也会展示 manual weight。
+# - 默认会先用 hybrid_de 模型生成德国 DE 预测，再用 DE/非美占比反推全球非美。
+# - 如果你已有人工校准后的 DE 预测 CSV，可把 de_forecast_model.mode 改为 csv，并填写 paths.de_forecast_csv。
+# - anchor_products 用于第二层全球非美反推；每个锚点仍需要数值 weight。
 
 paths:
   output_dir: /path/to/output_dir
-  base_data_dir: /path/to/anchor_excel_dir
-  de_forecast_csv: /path/to/de_forecast.csv
+  # 第二层全球非美反推的区域销量 Excel 目录。
+  base_data_dir: /path/to/global_region_anchor_excel_dir
+  # 可选：仅 mode=csv 时需要。
+  # de_forecast_csv: /path/to/de_forecast.csv
 
 output:
   # 输出文件会使用：{prefix}_forecast_{version_slug}.csv
   # 以及 {prefix}_method_{version_slug}.md 等命名。
   prefix: new_product_global_ex_us
   version_slug: v1_0
+
+de_forecast_model:
+  # hybrid_de：使用原 BE7200 DE v5.14 方法论：
+  # steady anchors × Bass × Opening × Seasonal/Pulse。
+  # csv：跳过第一层，直接读取 paths.de_forecast_csv。
+  mode: hybrid_de
+  state_json: /path/to/de_anchors_state.json
+  launch_month: 2026-07
+  horizon_months: 18
+  recent_n: 6
+  error_band: 0.15
+  bass:
+    p: 0.0085
+    q: 0.18
+  opening:
+    alpha: 0.42
+    tau_peak: 3.0
+  seasonal:
+    1: 0.92
+    2: 0.95
+    3: 1.05
+    4: 0.97
+    5: 0.99
+    6: 1.00
+    7: 1.28
+    8: 0.97
+    9: 0.97
+    10: 1.10
+    11: 1.15
+    12: 1.02
+  pulse:
+    11: 20
+    10: 10
+    7: 30
+    3: 3
+    1: -3
+    2: -1
+  # 第一层 DE 稳态锚点表。
+  # source=anchors 读取 state_json.anchors.<key>.monthly_de_amazon
+  # source=competitors 读取 state_json.competitors_keepa.<key>.monthly
+  steady_anchors:
+    - label: Direct predecessor
+      key: ANCHOR_DIRECT
+      source: anchors
+      weight: 0.55
+      v1_factor: 1.18
+      v2_factor: 1.25
+      v3_factor: 1.35
+    - label: Same brand mid/high reference
+      key: ANCHOR_SAME_BRAND
+      source: anchors
+      weight: 0.10
+      v1_factor: 1.50
+      v2_factor: 1.80
+      v3_factor: 2.10
+    - label: Competitor direct reference
+      key: COMPETITOR_ASIN
+      source: competitors
+      weight: 0.10
+      v1_factor: 0.95
+      v2_factor: 1.10
+      v3_factor: 1.30
 
 excel:
   sheet_name: 销量
