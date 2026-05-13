@@ -20,7 +20,7 @@
 
 - 本品参数：名称、上市月份、品类、Wi-Fi 标准、频段、定位、MSRP / 预计均价。
 - DE 第一层锚点：德国月销纪录，或已经整理好的 `de_anchors_state.json`。
-- DE 稳态锚点表：每个锚点的权重，以及 V1/V2/V3 相对系数。
+- DE 稳态锚点表：每个锚点的产品参数，以及 V1/V2/V3 相对系数；权重默认自动计算。
 - 全球非美第二层锚点：至少 2 个历史产品的区域销量 Excel，且必须有德国销量。
 
 ### 1. 本品参数
@@ -71,14 +71,18 @@
 | `label` | 展示名 |
 | `key` | 对应 state JSON 里的产品名或 ASIN |
 | `source` | `anchors` 或 `competitors` |
-| `weight` | 稳态权重 |
+| `category` / `wifi_standard` / `band_type` / `positioning` / `avg_price` | 用于自动计算稳态锚点权重 |
+| `role` / `data_source` | 用于自动计算稳态锚点权重 |
+| `weight` | 可选；仅 `steady_weighting.mode=manual` 时必填 |
 | `v1_factor` / `v2_factor` / `v3_factor` | 本品相对该锚点的三档系数 |
 
 第一层会用近 `recent_n` 个月均值计算：
 
 ```text
-Steady(v) = Σ weight(i) × recent_avg(i) × factor(i, v)
+Steady(v) = Σ auto_weight(i) × recent_avg(i) × factor(i, v)
 ```
+
+默认 `de_forecast_model.steady_weighting.mode=auto`，工具会自动计算 `auto_weight`。如果要完全复现某个历史模型里的人工权重，可以改成 `mode=manual` 并填写每个锚点的 `weight`。
 
 再用 BE7200 v5.14 方法论里的 Bass、Opening、Seasonal、Pulse 生成 M1-M18 的 DE 月度三档。
 
@@ -188,12 +192,19 @@ be10000_global_ex_us_interactive_v1_0.html
    - recent_n: 6
    - launch_month:
    - horizon_months: 18
+   - steady_weighting.mode: auto
    - Bass / Opening / Seasonal / Pulse 如无特别说明，使用模板默认值
 4. DE 稳态锚点表：
    - label:
      key:
      source: anchors / competitors
-     weight:
+     category:
+     wifi_standard:
+     band_type:
+     positioning:
+     avg_price:
+     role:
+     data_source:
      v1_factor:
      v2_factor:
      v3_factor:

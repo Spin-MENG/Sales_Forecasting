@@ -37,11 +37,19 @@ def validate_config(config):
             errors.append("DE 预测模式为 hybrid_de，但缺少 launch_month / target_product.launch_date。")
         if not de_model.get("steady_anchors"):
             errors.append("DE 预测模式为 hybrid_de，但缺少 steady_anchors。")
+        steady_weighting_mode = str((de_model.get("steady_weighting") or {}).get("mode", "auto")).lower()
+        if steady_weighting_mode not in ("auto", "manual"):
+            errors.append("de_forecast_model.steady_weighting.mode 只能是 auto 或 manual。")
         for idx, anchor in enumerate(de_model.get("steady_anchors") or [], start=1):
             label = anchor.get("label") or anchor.get("key") or f"DE 稳态锚点 {idx}"
-            for field in ("key", "weight", "v1_factor", "v2_factor", "v3_factor"):
+            required_fields = ["key", "v1_factor", "v2_factor", "v3_factor"]
+            if steady_weighting_mode == "manual":
+                required_fields.append("weight")
+            for field in required_fields:
                 if field not in anchor:
                     errors.append(f"{label} 缺少 {field}，无法计算 DE 稳态。")
+            if steady_weighting_mode == "auto":
+                _validate_product_fields(errors, anchor, f"DE 稳态锚点 {label}")
 
     total_weight = 0
     for idx, product in enumerate(anchor_products, start=1):

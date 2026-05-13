@@ -169,6 +169,7 @@ def main():
         print("="*70)
         de_forecast, de_diagnostics = generate_hybrid_de_forecast(CONFIG, TARGET_PRODUCT, resolve_path)
         print(f"DE Hybrid state: {de_diagnostics['state_json']}")
+        print(f"DE 稳态权重模式: {de_diagnostics['weighting_mode']}")
         print(
             "DE 稳态: "
             f"V1={de_diagnostics['steady']['v1']:.0f}, "
@@ -177,9 +178,10 @@ def main():
         )
         print("DE 稳态锚点贡献（V2）:")
         for item in de_diagnostics["contributions"]:
+            weight_text = f"auto_w={item['auto_weight']:.2f}" if item["auto_weight"] is not None else f"manual_w={item['weight']:.2f}"
             print(
                 f"  {item['label']}: 近{de_diagnostics['recent_n']}月均={item['avg_recent']:.0f}, "
-                f"w={item['weight']:.2f}, factor={item['v2_factor']:.2f}, 贡献={item['v2_contribution']:.1f}"
+                f"{weight_text}, factor={item['v2_factor']:.2f}, 贡献={item['v2_contribution']:.1f}"
             )
     
     print(f"读取 {len(de_forecast)} 行 {CONFIG['forecast'].get('de_source_label', 'DE input')} DE 月度预测")

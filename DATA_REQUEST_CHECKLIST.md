@@ -81,7 +81,14 @@ state JSON 结构：
 | 是 | `label` | Flint 2 (MT6000) | 展示名 |
 | 是 | `key` | Flint2 | 对应 state JSON 里的 key |
 | 是 | `source` | anchors | `anchors` 或 `competitors` |
-| 是 | `weight` | 0.55 | 稳态权重 |
+| 是 | `category` | dual_band_wifi6 | 用于自动权重 |
+| 是 | `wifi_standard` | wifi6 | 用于自动权重 |
+| 是 | `band_type` | dual_band | 用于自动权重 |
+| 是 | `positioning` | mid | 用于自动权重 |
+| 是 | `avg_price` | 139.99 | 用于自动权重 |
+| 是 | `role` | direct_predecessor_recent | 用于自动权重 |
+| 是 | `data_source` | internal_sales | 用于自动权重 |
+| 可选 | `weight` | 0.55 | 仅 manual 模式必填；auto 模式可不填 |
 | 是 | `v1_factor` | 1.18 | 悲观档相对系数 |
 | 是 | `v2_factor` | 1.25 | 中性档相对系数 |
 | 是 | `v3_factor` | 1.35 | 乐观档相对系数 |
@@ -90,12 +97,14 @@ state JSON 结构：
 计算口径：
 
 ```text
-Steady(v) = Σ weight(i) × recent_avg(i) × factor(i, v)
+Steady(v) = Σ auto_weight(i) × recent_avg(i) × factor(i, v)
 ```
 
 检查项：
 
-- `weight` 合计建议约等于 1。
+- 默认 `steady_weighting.mode=auto`，不需要手填 `weight`。
+- 如果改用 manual 模式，`weight` 合计建议约等于 1。
+- 需要完全复现某个旧模型时，用 manual；做通用新品预测时，优先用 auto。
 - 主锚点必须有清楚业务理由，例如直接前代、同价位竞品、同代高端参考。
 - V1/V2/V3 factor 要符合业务直觉：`v1_factor <= v2_factor <= v3_factor`。
 

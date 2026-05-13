@@ -2,6 +2,13 @@ import csv
 import json
 import math
 
+from .scoring import (
+    data_quality_score,
+    months_between,
+    normalize_factors,
+    product_fit_score,
+    role_score,
+)
 from .validation import BusinessValidationError
 
 
@@ -63,7 +70,14 @@ def generate_hybrid_de_forecast(config, target_product, resolve_path_fn):
     if not steady_anchors:
         raise BusinessValidationError("hybrid_de 模式缺少 steady_anchors，无法计算 DE 稳态。")
 
-    steady, contributions = compute_steady(state, steady_anchors, recent_n)
+    steady_weighting = model.get("steady_weighting") or {}
+    steady, contributions, weighting_mode = compute_steady(
+        state,
+        steady_anchors,
+        recent_n,
+        target_product,
+        steady_weighting,
+    )
     seasonal = {int(k): float(v) for k, v in (model.get("seasonal") or default_seasonal()).items()}
     pulse = {int(k): float(v) for k, v in (model.get("pulse") or default_pulse()).items()}
     opening = model.get("opening", {})
@@ -103,6 +117,7 @@ def generate_hybrid_de_forecast(config, target_product, resolve_path_fn):
         "state_json": str(state_path),
         "steady": steady,
         "contributions": contributions,
+        "weighting_mode": weighting_mode,
         "recent_n": recent_n,
         "horizon_months": horizon,
         "launch_month": launch,
@@ -118,16 +133,37 @@ def generate_hybrid_de_forecast(config, target_product, resolve_path_fn):
     return rows, diagnostics
 
 
-def compute_steady(state, steady_anchors, recent_n):
+def compute_steady(state, steady_anchors, recent_n, target_product, weighting_config):
     steady = {"v1": 0.0, "v2": 0.0, "v3": 0.0}
-    contributions = []
+    weighting_mode = str((weighting_config or {}).get("mode", "auto")).lower()
+    if weighting_mode not in ("auto", "manual"):
+        raise BusinessValidationError("de_forecast_model.steady_weighting.mode 只能是 auto 或 manual。")
+
+    prepared = []
     for anchor in steady_anchors:
         monthly = get_monthly_series(state, anchor.get("source", "anchors"), anchor["key"])
-        avg = avg_recent(monthly, recent_n)
-        weight = float(anchor.get("weight", 0))
+        avg, n_months, start_month, end_month = avg_recent_with_window(monthly, recent_n)
+        if n_months <= 0:
+            label = anchor.get("label") or anchor["key"]
+            raise BusinessValidationError(f"DE 稳态锚点 {label} 没有可用德国月销，无法计算近 {recent_n} 月均。")
+        prepared.append({
+            "anchor": anchor,
+            "avg_recent": avg,
+            "n_months": n_months,
+            "start_month": start_month,
+            "end_month": end_month,
+        })
+
+    weights = calculate_steady_anchor_weights(prepared, target_product, weighting_config, weighting_mode)
+    contributions = []
+    for item in prepared:
+        anchor = item["anchor"]
+        weight_info = weights[anchor["key"]]
+        weight = weight_info["weight"]
         v1_factor = float(anchor.get("v1_factor"))
         v2_factor = float(anchor.get("v2_factor"))
         v3_factor = float(anchor.get("v3_factor"))
+        avg = item["avg_recent"]
         c1 = avg * weight * v1_factor
         c2 = avg * weight * v2_factor
         c3 = avg * weight * v3_factor
@@ -139,7 +175,15 @@ def compute_steady(state, steady_anchors, recent_n):
             "key": anchor["key"],
             "source": anchor.get("source", "anchors"),
             "avg_recent": avg,
+            "n_months": item["n_months"],
+            "start_month": item["start_month"],
+            "end_month": item["end_month"],
             "weight": weight,
+            "manual_weight": weight_info["manual_weight"],
+            "auto_weight": weight_info["auto_weight"],
+            "auto_score": weight_info["auto_score"],
+            "score_parts": weight_info["score_parts"],
+            "product_fit_parts": weight_info["product_fit_parts"],
             "v1_factor": v1_factor,
             "v2_factor": v2_factor,
             "v3_factor": v3_factor,
@@ -147,7 +191,66 @@ def compute_steady(state, steady_anchors, recent_n):
         })
     if steady["v2"] <= 0:
         raise BusinessValidationError("DE hybrid 稳态 V2 不大于 0，请检查 steady_anchors 的销量、权重和相对系数。")
-    return steady, contributions
+    return steady, contributions, weighting_mode
+
+
+def calculate_steady_anchor_weights(prepared, target_product, weighting_config, weighting_mode):
+    if weighting_mode == "manual":
+        total = sum(float(item["anchor"].get("weight", 0)) for item in prepared)
+        if total <= 0:
+            raise BusinessValidationError("DE 稳态 manual 权重合计不大于 0，请检查 steady_anchors.weight。")
+        return {
+            item["anchor"]["key"]: {
+                "weight": float(item["anchor"].get("weight", 0)) / total,
+                "manual_weight": float(item["anchor"].get("weight", 0)),
+                "auto_weight": None,
+                "auto_score": None,
+                "score_parts": {},
+                "product_fit_parts": {},
+            }
+            for item in prepared
+        }
+
+    factors = normalize_factors((weighting_config or {}).get("factors", {}))
+    product_fit_factors = (weighting_config or {}).get("product_fit_factors", {})
+    latest_end_month = max(item["end_month"] for item in prepared if item["end_month"])
+
+    scored = []
+    for item in prepared:
+        anchor = item["anchor"]
+        recency_months = max(0, months_between(latest_end_month, item["end_month"]))
+        product_fit, product_fit_parts = product_fit_score(target_product, anchor, product_fit_factors)
+        score_parts = {
+            "role": role_score(anchor.get("role")),
+            "product_fit": product_fit,
+            "recency": math.exp(-recency_months / 18),
+            "sample_window": min(1.0, math.sqrt(item["n_months"] / 12)),
+            "data_quality": data_quality_score(anchor.get("data_source")),
+        }
+        auto_score = sum(score_parts[k] * factors[k] for k in factors)
+        scored.append({
+            "key": anchor["key"],
+            "manual_weight": anchor.get("weight"),
+            "auto_score": auto_score,
+            "score_parts": score_parts,
+            "product_fit_parts": product_fit_parts,
+        })
+
+    score_sum = sum(item["auto_score"] for item in scored)
+    if score_sum <= 0:
+        raise BusinessValidationError("DE 稳态 auto 权重分数合计不大于 0，请检查 steady_anchors。")
+    out = {}
+    for item in scored:
+        auto_weight = item["auto_score"] / score_sum
+        out[item["key"]] = {
+            "weight": auto_weight,
+            "manual_weight": None if item["manual_weight"] is None else float(item["manual_weight"]),
+            "auto_weight": auto_weight,
+            "auto_score": item["auto_score"],
+            "score_parts": item["score_parts"],
+            "product_fit_parts": item["product_fit_parts"],
+        }
+    return out
 
 
 def get_monthly_series(state, source, key):
@@ -166,11 +269,16 @@ def get_monthly_series(state, source, key):
 
 
 def avg_recent(monthly, recent_n):
+    avg, _, _, _ = avg_recent_with_window(monthly, recent_n)
+    return avg
+
+
+def avg_recent_with_window(monthly, recent_n):
     items = sorted((ym, float(v)) for ym, v in monthly.items() if float(v or 0) > 0)
     if not items:
-        return 0.0
+        return 0.0, 0, None, None
     recent = items[-recent_n:] if len(items) >= recent_n else items
-    return sum(v for _, v in recent) / len(recent)
+    return sum(v for _, v in recent) / len(recent), len(recent), recent[0][0], recent[-1][0]
 
 
 def generate_monthly_series(*, steady, launch, horizon, bass_p, bass_q, opening_alpha, opening_tau_peak, seasonal, pulse):
