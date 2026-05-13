@@ -485,11 +485,17 @@ def write_reports(
         "p10": [round(v) for v in g_v2_p10],
         "p50": [round(v) for v in g_v2_p50],
         "p90": [round(v) for v in g_v2_p90],
-        "fixedMid": [round(v) for v in g_v2_mid],
         "cumP10": [round(v) for v in np.cumsum(g_v2_p10)],
         "cumP50": [round(v) for v in np.cumsum(g_v2_p50)],
         "cumP90": [round(v) for v in np.cumsum(g_v2_p90)],
         "cumFixedMid": [round(v) for v in np.cumsum(g_v2_mid)],
+        "fixedMid": [round(v) for v in g_v2_mid],
+        "keyIndexes": [
+            {"label": "M1 上市", "index": 0},
+            {"label": "BF Y1", "index": bf_y1_idx},
+            {"label": "PD Y2", "index": pd_y2_idx},
+            {"label": "BF Y2", "index": bf_y2_idx},
+        ],
         "events": {idx: "<br/>".join(f"{e['label']}：{e['detail']}" for e in events) for idx, events in event_tooltips.items()},
         "timelineEvents": timeline_events,
         "anchorWeights": [
@@ -523,6 +529,11 @@ def write_reports(
                 "p10": item["p10"],
                 "p50": item["p50"],
                 "p90": item["p90"],
+                "fixedMid": item["p50"],
+                "cumP10": [round(v) for v in np.cumsum(item["p10"])],
+                "cumP50": [round(v) for v in np.cumsum(item["p50"])],
+                "cumP90": [round(v) for v in np.cumsum(item["p90"])],
+                "cumFixedMid": [round(v) for v in np.cumsum(item["p50"])],
                 "steadyV2": item["steady_v2"],
                 "deY1": item["de_y1"],
                 "deM18": item["de_m18"],
@@ -593,6 +604,10 @@ def write_reports(
     .ad-kpi-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}.ad-kpi-card.highlight{background:linear-gradient(160deg,#eaf5f0,#dff0ed);border-color:var(--teal-mid)}
     .ad-kpi-label{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px}.ad-kpi-value{font-size:28px;font-weight:800;line-height:1;letter-spacing:-1px;color:var(--slate);margin-bottom:4px}.ad-kpi-value .unit{font-size:16px}.ad-kpi-sub{font-size:11px;color:var(--muted-2);margin-top:6px}
     .chart-box{width:100%;height:420px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;margin-top:16px}.chart-box.small{height:330px}
+    .scenario-tabs{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 18px}
+    .scenario-tab{border:1px solid var(--border-2);background:#fff;color:var(--slate-2);border-radius:999px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;transition:all .18s}
+    .scenario-tab:hover{border-color:var(--teal-mid);color:var(--teal)}
+    .scenario-tab.active{background:var(--teal);border-color:var(--teal);color:#fff;box-shadow:var(--shadow-sm)}
     .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.insight{margin-top:18px;padding:16px 18px;border-radius:var(--radius-sm);background:#eaf5f0;border-left:4px solid var(--teal-mid);font-size:13px;color:var(--slate-2)}.insight.warning{background:#fef8f0;border-left-color:var(--orange)}
     .explain-list{margin-top:16px;padding-left:18px;font-size:13px;color:var(--slate-2)}.explain-list li{margin-bottom:8px}
     table{width:100%;border-collapse:collapse;font-size:13px;margin-top:16px}th{background:#eef5f2;color:var(--slate);font-size:11px;text-transform:uppercase;letter-spacing:.7px;text-align:left;padding:10px 12px}td{border-bottom:1px solid var(--border);padding:11px 12px}td.num,th.num{text-align:right}.good{color:var(--teal-mid);font-weight:700}.warn{color:var(--orange);font-weight:700}.bad{color:var(--coral);font-weight:700}
@@ -622,11 +637,12 @@ def write_reports(
         <div class="section-label">Executive View</div>
         <h2>P10 / P50 / P90 经营口径</h2>
         <p class="desc">P10 用于保守备货，P50 用于经营计划，P90 用于产能和断货风险评估。当前区间只反映 DE/非美 multiplier 不确定性。</p>
+        <div id="scenarioTabs" class="scenario-tabs"></div>
         <div class="ad-kpi-grid">
-          <div class="ad-kpi-card"><div class="ad-kpi-label">Y1 P10</div><div class="ad-kpi-value">__Y1_P10__<span class="unit">台</span></div><div class="ad-kpi-sub">保守备货线</div></div>
-          <div class="ad-kpi-card highlight"><div class="ad-kpi-label">Y1 P50</div><div class="ad-kpi-value">__Y1_P50__<span class="unit">台</span></div><div class="ad-kpi-sub">经营计划线</div></div>
-          <div class="ad-kpi-card"><div class="ad-kpi-label">Y1 P90</div><div class="ad-kpi-value">__Y1_P90__<span class="unit">台</span></div><div class="ad-kpi-sub">产能风险线</div></div>
-          <div class="ad-kpi-card"><div class="ad-kpi-label">Peak Month</div><div class="ad-kpi-value">M__PEAK_M__</div><div class="ad-kpi-sub">__PEAK_CAL__ · P50 __PEAK_VALUE__ 台</div></div>
+          <div class="ad-kpi-card"><div class="ad-kpi-label">Y1 P10</div><div id="kpiY1P10" class="ad-kpi-value">__Y1_P10__<span class="unit">台</span></div><div class="ad-kpi-sub">保守备货线</div></div>
+          <div class="ad-kpi-card highlight"><div class="ad-kpi-label">Y1 P50</div><div id="kpiY1P50" class="ad-kpi-value">__Y1_P50__<span class="unit">台</span></div><div class="ad-kpi-sub">经营计划线</div></div>
+          <div class="ad-kpi-card"><div class="ad-kpi-label">Y1 P90</div><div id="kpiY1P90" class="ad-kpi-value">__Y1_P90__<span class="unit">台</span></div><div class="ad-kpi-sub">产能风险线</div></div>
+          <div class="ad-kpi-card"><div class="ad-kpi-label">Peak Month</div><div id="kpiPeakM" class="ad-kpi-value">M__PEAK_M__</div><div id="kpiPeakSub" class="ad-kpi-sub">__PEAK_CAL__ · P50 __PEAK_VALUE__ 台</div></div>
         </div>
         <div id="monthlyChart" class="chart-box"></div>
         <div class="insight">曲线支持 hover：可查看每月 DE V2、全球非美 P10/P50/P90、固定中性，以及促销活动、模型校准和模型切换节点。</div>
@@ -685,7 +701,7 @@ def write_reports(
         <h2>关键月份明细</h2>
         <table>
           <thead><tr><th>节点</th><th>月份</th><th class="num">DE V2</th><th class="num">P10</th><th class="num">P50</th><th class="num">P90</th></tr></thead>
-          <tbody>__KEY_ROWS__</tbody>
+          <tbody id="keyRows">__KEY_ROWS__</tbody>
         </table>
         <h2 style="margin-top:28px;font-size:17px;">促销活动与模型校准时间线</h2>
         <table>
@@ -702,19 +718,51 @@ def write_reports(
     const DATA = __DATA_JSON__;
     const C = { tealDeep:'#274753', teal:'#297270', tealMid:'#299d8f', sage:'#8ab07c', gold:'#e7c66b', orange:'#f3a361', coral:'#e66d50', border:'#d8e5e2', muted:'#5e8a87' };
     function fmt(n){ return Number(n).toLocaleString('en-US'); }
+    function withUnit(n){ return `${fmt(n)}<span class="unit">台</span>`; }
+    function cumulate(values){ let acc = 0; return values.map(v=>Math.round(acc += v)); }
     function tooltipStyle(){ return { backgroundColor:'rgba(255,255,255,.96)', borderColor:C.border, borderWidth:1, textStyle:{color:C.tealDeep}, extraCssText:'box-shadow:0 8px 24px rgba(39,71,83,.12);border-radius:8px;' }; }
     function axisStyle(){ return { axisLine:{lineStyle:{color:C.border}}, axisTick:{show:false}, axisLabel:{color:C.muted}, splitLine:{lineStyle:{color:'#edf3f1'}} }; }
     function initChart(id){ const el=document.getElementById(id); const chart=echarts.init(el); window.addEventListener('resize',()=>chart.resize()); return chart; }
+    const BASE_VIEW = {
+      label:'Base',
+      mode:'base',
+      months:DATA.months,
+      monthLabels:DATA.monthLabels,
+      deV2:DATA.deV2,
+      p10:DATA.p10,
+      p50:DATA.p50,
+      p90:DATA.p90,
+      fixedMid:DATA.fixedMid,
+      cumP10:DATA.cumP10,
+      cumP50:DATA.cumP50,
+      cumP90:DATA.cumP90,
+      cumFixedMid:DATA.cumFixedMid,
+      globalY1P50:DATA.cumP50[11],
+      globalM18P50:DATA.cumP50[17],
+      peakM:__PEAK_M__,
+      peakCal:'__PEAK_CAL__',
+      peakP50:__PEAK_VALUE_RAW__
+    };
+    const VIEWS = (DATA.scenarios && DATA.scenarios.length) ? DATA.scenarios : [BASE_VIEW];
+    let activeView = VIEWS[0];
+    function xCategories(view){ return view.monthLabels.map((m,i)=>`${m}\n${view.months[i].slice(2)}`); }
+    function keyRowsForView(view){
+      return DATA.keyIndexes.map(k=>{
+        const i = k.index;
+        return `<tr><td>${k.label}</td><td>${view.months[i]}</td><td class='num'>${fmt(view.deV2[i])}</td><td class='num'>${fmt(view.p10[i])}</td><td class='num good'>${fmt(view.p50[i])}</td><td class='num warn'>${fmt(view.p90[i])}</td></tr>`;
+      }).join('');
+    }
 
     const monthly = initChart('monthlyChart');
-    const xCats = DATA.monthLabels.map((m,i)=>`${m}\n${DATA.months[i].slice(2)}`);
     const promoEvents = DATA.timelineEvents.filter(e=>e.inRange && ['launch','promotion'].includes(e.type));
     const calibrationEvents = DATA.timelineEvents.filter(e=>e.inRange && ['calibration','model_switch'].includes(e.type));
-    monthly.setOption({
+    function monthlyOption(view){
+      const xCats = xCategories(view);
+      return {
       color:[C.sage,C.tealMid,C.orange,C.tealDeep,C.coral,C.gold,C.teal],
       tooltip:{...tooltipStyle(), trigger:'axis', formatter:(params)=>{
         const i=params[0].dataIndex; const event=DATA.events[i] ? `<br/><b>${DATA.events[i]}</b>` : '';
-        return `<b>${DATA.monthLabels[i]} · ${DATA.months[i]}</b>${event}<br/>` + params.map(p=>{
+        return `<b>${view.monthLabels[i]} · ${view.months[i]}</b>${event}<br/>` + params.map(p=>{
           const value = Array.isArray(p.value) ? p.value[1] : p.value;
           return `${p.marker}${p.seriesName}: <b>${fmt(value)}</b>`;
         }).join('<br/>');
@@ -724,45 +772,86 @@ def write_reports(
       xAxis:{type:'category', data:xCats, ...axisStyle()},
       yAxis:{type:'value', ...axisStyle(), axisLabel:{color:C.muted, formatter:(v)=>fmt(v)}},
       series:[
-        {name:'P10', type:'line', smooth:true, data:DATA.p10, symbolSize:6, lineStyle:{width:2},
+        {name:'P10', type:'line', smooth:true, data:view.p10, symbolSize:6, lineStyle:{width:2},
           markLine:{symbol:'none', silent:false, label:{formatter:(p)=>p.name, color:C.teal, fontWeight:800, fontSize:10},
             lineStyle:{color:C.teal, type:'dashed', width:1.5, opacity:.72},
             data:calibrationEvents.map(e=>({name:e.label, xAxis:xCats[e.index]}))}},
-        {name:'P50', type:'line', smooth:true, data:DATA.p50, symbolSize:7, lineStyle:{width:4}},
-        {name:'P90', type:'line', smooth:true, data:DATA.p90, symbolSize:6, lineStyle:{width:2}},
-        {name:'固定中性', type:'line', smooth:true, data:DATA.fixedMid, symbol:'none', lineStyle:{width:2,type:'dashed'}},
-        {name:'DE V2', type:'bar', data:DATA.deV2, barWidth:14, yAxisIndex:0, itemStyle:{opacity:.28}},
+        {name:'P50', type:'line', smooth:true, data:view.p50, symbolSize:7, lineStyle:{width:4}},
+        {name:'P90', type:'line', smooth:true, data:view.p90, symbolSize:6, lineStyle:{width:2}},
+        {name:'固定中性', type:'line', smooth:true, data:view.fixedMid || view.p50, symbol:'none', lineStyle:{width:2,type:'dashed'}},
+        {name:'DE V2', type:'bar', data:view.deV2, barWidth:14, yAxisIndex:0, itemStyle:{opacity:.28}},
         {name:'促销/上市', type:'scatter', symbol:'pin', symbolSize:46,
-          data:promoEvents.map(e=>({name:e.label, value:[xCats[e.index], e.y], detail:e.detail})),
+          data:promoEvents.map(e=>({name:e.label, value:[xCats[e.index], Math.round((view.p90[e.index] || 0) * 1.04)], detail:e.detail})),
           itemStyle:{color:C.orange}, label:{show:true, formatter:(p)=>p.name, position:'top', color:C.orange, fontWeight:800, fontSize:10}},
       ],
       dataZoom:[{type:'inside'}, {type:'slider', height:18, bottom:8}]
-    });
+      };
+    }
+    monthly.setOption(monthlyOption(activeView));
 
     const cumulative = initChart('cumulativeChart');
-    cumulative.setOption({
+    function cumulativeOption(view){
+      const xCats = xCategories(view);
+      const cumP10 = view.cumP10 || cumulate(view.p10);
+      const cumP50 = view.cumP50 || cumulate(view.p50);
+      const cumP90 = view.cumP90 || cumulate(view.p90);
+      const cumFixedMid = view.cumFixedMid || cumulate(view.fixedMid || view.p50);
+      return {
       color:[C.sage,C.tealMid,C.orange,C.tealDeep],
       tooltip:{...tooltipStyle(), trigger:'axis', formatter:(params)=>{
         const i=params[0].dataIndex;
-        return `<b>${DATA.monthLabels[i]} · ${DATA.months[i]}</b><br/>` + params.map(p=>`${p.marker}${p.seriesName}: <b>${fmt(p.value)}</b>`).join('<br/>');
+        return `<b>${view.monthLabels[i]} · ${view.months[i]}</b><br/>` + params.map(p=>`${p.marker}${p.seriesName}: <b>${fmt(p.value)}</b>`).join('<br/>');
       }},
       legend:{top:8},
       grid:{left:62,right:28,top:58,bottom:42},
       xAxis:{type:'category', data:xCats, ...axisStyle()},
       yAxis:{type:'value', ...axisStyle(), axisLabel:{color:C.muted, formatter:(v)=>fmt(v)}},
       series:[
-        {name:'累计 P10', type:'line', smooth:true, data:DATA.cumP10, symbolSize:5, lineStyle:{width:2}},
-        {name:'累计 P50', type:'line', smooth:true, data:DATA.cumP50, symbolSize:6, lineStyle:{width:4},
+        {name:'累计 P10', type:'line', smooth:true, data:cumP10, symbolSize:5, lineStyle:{width:2}},
+        {name:'累计 P50', type:'line', smooth:true, data:cumP50, symbolSize:6, lineStyle:{width:4},
           markPoint:{symbol:'pin', symbolSize:58, itemStyle:{color:C.tealMid}, label:{formatter:(p)=>p.name},
             data:[
-              {name:'Y1', coord:[xCats[11], DATA.cumP50[11]], value:DATA.cumP50[11]},
-              {name:'M18', coord:[xCats[17], DATA.cumP50[17]], value:DATA.cumP50[17]},
+              {name:'Y1', coord:[xCats[11], cumP50[11]], value:cumP50[11]},
+              {name:'M18', coord:[xCats[17], cumP50[17]], value:cumP50[17]},
             ]}},
-        {name:'累计 P90', type:'line', smooth:true, data:DATA.cumP90, symbolSize:5, lineStyle:{width:2}},
-        {name:'累计固定中性', type:'line', smooth:true, data:DATA.cumFixedMid, symbol:'none', lineStyle:{width:2,type:'dashed'}},
+        {name:'累计 P90', type:'line', smooth:true, data:cumP90, symbolSize:5, lineStyle:{width:2}},
+        {name:'累计固定中性', type:'line', smooth:true, data:cumFixedMid, symbol:'none', lineStyle:{width:2,type:'dashed'}},
       ],
       dataZoom:[{type:'inside'}, {type:'slider', height:18, bottom:8}]
-    });
+      };
+    }
+    cumulative.setOption(cumulativeOption(activeView));
+
+    function renderScenarioTabs(){
+      const tabs = document.getElementById('scenarioTabs');
+      if (!tabs || VIEWS.length <= 1) { if (tabs) tabs.style.display = 'none'; return; }
+      tabs.innerHTML = VIEWS.map((v,i)=>`<button class="scenario-tab ${i===0?'active':''}" data-idx="${i}">${v.label}</button>`).join('');
+      tabs.querySelectorAll('.scenario-tab').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          tabs.querySelectorAll('.scenario-tab').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          setExecutiveView(VIEWS[Number(btn.dataset.idx)]);
+        });
+      });
+    }
+    function setExecutiveView(view){
+      activeView = view;
+      const y1P10 = (view.cumP10 || cumulate(view.p10))[11];
+      const y1P50 = (view.cumP50 || cumulate(view.p50))[11];
+      const y1P90 = (view.cumP90 || cumulate(view.p90))[11];
+      const peakIdx = view.p50.reduce((best, v, i, arr)=> v > arr[best] ? i : best, 0);
+      document.getElementById('kpiY1P10').innerHTML = withUnit(y1P10);
+      document.getElementById('kpiY1P50').innerHTML = withUnit(y1P50);
+      document.getElementById('kpiY1P90').innerHTML = withUnit(y1P90);
+      document.getElementById('kpiPeakM').textContent = `M${view.monthLabels[peakIdx].replace('M','')}`;
+      document.getElementById('kpiPeakSub').textContent = `${view.months[peakIdx]} · P50 ${fmt(view.p50[peakIdx])} 台`;
+      monthly.setOption(monthlyOption(view), true);
+      cumulative.setOption(cumulativeOption(view), true);
+      const keyBody = document.getElementById('keyRows');
+      if (keyBody) keyBody.innerHTML = keyRowsForView(view);
+    }
+    renderScenarioTabs();
+    setExecutiveView(activeView);
 
     const weightChart = initChart('weightChart');
     weightChart.setOption({
@@ -896,6 +985,7 @@ def write_reports(
         .replace("__PEAK_M__", str(peak_row["M"]))
         .replace("__PEAK_CAL__", peak_row["cal"])
         .replace("__PEAK_VALUE__", fmt(g_v2_p50[peak_idx]))
+        .replace("__PEAK_VALUE_RAW__", str(round(g_v2_p50[peak_idx])))
         .replace("__ANCHOR_ROWS__", "\n".join(anchor_rows))
         .replace("__EXPLANATION_ITEMS__", explanation_items)
         .replace("__KEY_ROWS__", "\n".join(key_rows))

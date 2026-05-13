@@ -92,6 +92,8 @@ Steady(v) = Σ auto_weight(i) × recent_avg(i) × factor(i, v)
 | Competitor pressure | 提高竞品权重，作为保守压力测试 |
 | Predecessor-led | 提高直系前代权重，适合明确替代关系的新品 |
 
+Interactive HTML 顶部的经营口径图会提供情境切换按钮；切换后 KPI、月度 P10/P50/P90、累计曲线和关键月份表会同步更新。
+
 再用 BE7200 v5.14 方法论里的 Bass、Opening、Seasonal、Pulse 生成 M1-M18 的 DE 月度三档。
 
 ### 3. 全球区域锚点销量 Excel
