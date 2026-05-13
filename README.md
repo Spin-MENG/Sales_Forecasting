@@ -16,6 +16,13 @@
 
 ## 同事需要准备什么
 
+完整资料清单见 [DATA_REQUEST_CHECKLIST.md](DATA_REQUEST_CHECKLIST.md)。如果只想快速判断能不能跑，至少需要：
+
+- 本品参数：名称、上市月份、品类、Wi-Fi 标准、频段、定位、MSRP / 预计均价。
+- DE 第一层锚点：德国月销纪录，或已经整理好的 `de_anchors_state.json`。
+- DE 稳态锚点表：每个锚点的权重，以及 V1/V2/V3 相对系数。
+- 全球非美第二层锚点：至少 2 个历史产品的区域销量 Excel，且必须有德国销量。
+
 ### 1. 本品参数
 
 填在 `target_product`：
@@ -160,7 +167,10 @@ be10000_global_ex_us_interactive_v1_0.html
 ```text
 请使用这个 repo 的 Sales Forecasting Tool 帮我跑新品预测。
 
-我的输入：
+目标：不要要求我先提供 DE 预测 CSV。请默认使用 de_forecast_model.mode=hybrid_de，
+用本品参数 + DE 锚点德国月销 + 稳态锚点系数先生成 DE 预测，再用全球区域锚点 Excel 反推全球非美。
+
+我的输入资料：
 1. 本品参数：
    - name:
    - launch_date:
@@ -170,8 +180,16 @@ be10000_global_ex_us_interactive_v1_0.html
    - wifi_standard:
    - band_type:
    - positioning:
-2. DE 锚点 state JSON：<填路径>
-3. DE 稳态锚点表：
+2. DE 锚点德国月销资料：
+   - 如果已有 state JSON：<填 de_anchors_state.json 路径>
+   - 如果没有 state JSON：请根据我提供的 DE 月销表整理成本工具需要的 state JSON
+   - state JSON 不要提交到 git
+3. DE Hybrid 参数：
+   - recent_n: 6
+   - launch_month:
+   - horizon_months: 18
+   - Bass / Opening / Seasonal / Pulse 如无特别说明，使用模板默认值
+4. DE 稳态锚点表：
    - label:
      key:
      source: anchors / competitors
@@ -179,8 +197,9 @@ be10000_global_ex_us_interactive_v1_0.html
      v1_factor:
      v2_factor:
      v3_factor:
-4. 全球区域锚点 Excel 目录：<填路径>
-5. 全球区域锚点产品列表：
+     reason:
+5. 全球区域锚点 Excel 目录：<填路径>
+6. 全球区域锚点产品列表：
    - name:
      file:
      category:
@@ -193,14 +212,21 @@ be10000_global_ex_us_interactive_v1_0.html
      start_month:
      end_month:
      weight:
-6. 输出目录：<填路径>
+7. 输出目录：<填路径>
 
 请你：
-1. 复制 forecast_config_template.yaml 生成一个新 config。
-2. 填入上述信息，默认使用 de_forecast_model.mode=hybrid_de。
-3. 运行 python3 forecast_tool.py --config <config path>。
-4. 如果报错，请根据业务校验信息修复 config 或指出缺少什么数据。
-5. 最后总结 DE V1/V2/V3、全球非美 P10/P50/P90、Y1、M18、峰值月，并列出输出文件路径。
+1. 先检查资料是否满足 DATA_REQUEST_CHECKLIST.md。
+2. 如缺少关键资料，请明确告诉我缺什么；不要硬编假数据。
+3. 复制 forecast_config_template.yaml 生成本地 config，真实 config 不要提交到 git。
+4. 填入上述信息，默认使用 de_forecast_model.mode=hybrid_de。
+5. 运行 python3 forecast_tool.py --config <config path>。
+6. 如果报错，请根据业务校验信息修复 config 或指出缺少什么数据。
+7. 最后总结：
+   - DE V1/V2/V3 的 Y1、M18、峰值月
+   - 全球非美 P10/P50/P90 的 Y1、M18、峰值月
+   - 使用了哪些 DE 稳态锚点和全球区域锚点
+   - 输出文件路径
+8. 不要 commit 真实 Excel、CSV、state JSON、config 或生成报告。
 ```
 
 ## 常见校验错误
