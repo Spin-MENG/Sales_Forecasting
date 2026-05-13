@@ -85,7 +85,9 @@ def write_reports(
     high_share_point,
     output_paths,
     de_source_label,
+    scenario_results=None,
 ):
+    scenario_results = scenario_results or []
     out_csv = output_paths["csv"]
     with open(out_csv, "w", newline="") as f:
         w = csv.writer(f)
@@ -511,6 +513,39 @@ def write_reports(
             }
             for item in anchor_scores
         ],
+        "scenarios": [
+            {
+                "label": item["label"],
+                "mode": item["mode"],
+                "months": item["months"],
+                "monthLabels": item["month_labels"],
+                "deV2": item["de_v2"],
+                "p10": item["p10"],
+                "p50": item["p50"],
+                "p90": item["p90"],
+                "steadyV2": item["steady_v2"],
+                "deY1": item["de_y1"],
+                "deM18": item["de_m18"],
+                "globalY1P50": item["global_y1_p50"],
+                "globalM18P10": item["global_m18_p10"],
+                "globalM18P50": item["global_m18_p50"],
+                "globalM18P90": item["global_m18_p90"],
+                "peakM": item["peak_m"],
+                "peakCal": item["peak_cal"],
+                "peakP50": item["peak_p50"],
+                "contributions": [
+                    {
+                        "label": c.get("label"),
+                        "weight": round(c.get("weight", 0), 4),
+                        "avgRecent": round(c.get("avg_recent", 0)),
+                        "v2Factor": round(c.get("v2_factor", 0), 4),
+                        "v2Contribution": round(c.get("v2_contribution", 0)),
+                    }
+                    for c in item.get("contributions", [])
+                ],
+            }
+            for item in scenario_results
+        ],
     }
 
     html = """
@@ -617,6 +652,18 @@ def write_reports(
         <table>
           <thead><tr><th>锚点</th><th class="num">Manual</th><th class="num">Auto</th><th class="num">Product Fit</th><th class="num">DE/非美</th></tr></thead>
           <tbody>__ANCHOR_ROWS__</tbody>
+        </table>
+      </section>
+
+      <section class="section" id="scenarioSection" style="display:none;">
+        <div class="section-label">DE Steady Scenarios</div>
+        <h2>三情境对比</h2>
+        <p class="desc">Balanced auto、Competitor pressure、Predecessor-led 共用同一套全球非美 multiplier，只改变第一层 DE steady 权重，用于比较直接前代与竞品压力对预测的影响。</p>
+        <div id="scenarioMonthlyChart" class="chart-box"></div>
+        <div id="scenarioCumulativeChart" class="chart-box"></div>
+        <table>
+          <thead><tr><th>情境</th><th>模式</th><th class="num">DE 稳态 V2</th><th class="num">DE Y1</th><th class="num">DE M18</th><th class="num">全球非美 Y1 P50</th><th class="num">全球非美 M18 P50</th><th>峰值月</th></tr></thead>
+          <tbody id="scenarioRows"></tbody>
         </table>
       </section>
 
@@ -758,6 +805,47 @@ def write_reports(
       series:[{name:'Multiplier', type:'bar', barWidth:42, data:[__MC_P10_NUM__,__MC_P50_NUM__,__MC_P90_NUM__],
         label:{show:true, position:'top', formatter:(p)=>p.value.toFixed(2)+'x'}}]
     });
+
+    if (DATA.scenarios && DATA.scenarios.length) {
+      document.getElementById('scenarioSection').style.display = 'block';
+      document.getElementById('scenarioRows').innerHTML = DATA.scenarios.map(s =>
+        `<tr><td><b>${s.label}</b></td><td>${s.mode}</td><td class="num">${fmt(s.steadyV2)}</td><td class="num">${fmt(s.deY1)}</td><td class="num">${fmt(s.deM18)}</td><td class="num">${fmt(s.globalY1P50)}</td><td class="num"><b>${fmt(s.globalM18P50)}</b></td><td>M${s.peakM} · ${s.peakCal}</td></tr>`
+      ).join('');
+
+      const sx = DATA.scenarios[0].monthLabels.map((m,i)=>`${m}\n${DATA.scenarios[0].months[i].slice(2)}`);
+      const scenarioMonthly = initChart('scenarioMonthlyChart');
+      scenarioMonthly.setOption({
+        color:[C.tealMid,C.orange,C.coral,C.sage,C.tealDeep],
+        tooltip:{...tooltipStyle(), trigger:'axis', formatter:(params)=>{
+          const i=params[0].dataIndex;
+          return `<b>${sx[i]}</b><br/>` + params.map(p=>`${p.marker}${p.seriesName}: <b>${fmt(p.value)}</b>`).join('<br/>');
+        }},
+        legend:{top:8},
+        grid:{left:56,right:24,top:58,bottom:42},
+        xAxis:{type:'category', data:sx, ...axisStyle()},
+        yAxis:{type:'value', ...axisStyle(), axisLabel:{color:C.muted, formatter:(v)=>fmt(v)}},
+        series:DATA.scenarios.map(s=>({name:s.label, type:'line', smooth:true, data:s.p50, symbolSize:6, lineStyle:{width:3}})),
+        dataZoom:[{type:'inside'}, {type:'slider', height:18, bottom:8}]
+      });
+
+      const scenarioCumulative = initChart('scenarioCumulativeChart');
+      scenarioCumulative.setOption({
+        color:[C.tealMid,C.orange,C.coral,C.sage,C.tealDeep],
+        tooltip:{...tooltipStyle(), trigger:'axis', formatter:(params)=>{
+          const i=params[0].dataIndex;
+          return `<b>${sx[i]}</b><br/>` + params.map(p=>`${p.marker}${p.seriesName}: <b>${fmt(p.value)}</b>`).join('<br/>');
+        }},
+        legend:{top:8},
+        grid:{left:62,right:24,top:58,bottom:42},
+        xAxis:{type:'category', data:sx, ...axisStyle()},
+        yAxis:{type:'value', ...axisStyle(), axisLabel:{color:C.muted, formatter:(v)=>fmt(v)}},
+        series:DATA.scenarios.map(s=>{
+          let acc = 0;
+          return {name:s.label, type:'line', smooth:true, data:s.p50.map(v=>Math.round(acc += v)), symbolSize:6, lineStyle:{width:3}};
+        }),
+        dataZoom:[{type:'inside'}, {type:'slider', height:18, bottom:8}]
+      });
+    }
     </script>
     </body>
     </html>

@@ -122,6 +122,27 @@ de_forecast_model:
       v1_factor: 0.95
       v2_factor: 1.10
       v3_factor: 1.30
+  # 可选：在同一个 interactive HTML 中展示多个 DE steady 情境。
+  # - balanced-auto：完全自动权重
+  # - competitor-pressure：提高竞品参考，作为保守压力测试
+  # - predecessor-led：提高直系前代参考，适合明确替代关系的新品
+  scenarios:
+    - name: balanced_auto
+      label: Balanced auto
+      steady_weighting:
+        mode: auto
+    - name: competitor_pressure
+      label: Competitor pressure
+      weight_overrides:
+        ANCHOR_DIRECT: 0.25
+        ANCHOR_SAME_BRAND: 0.15
+        COMPETITOR_ASIN: 0.60
+    - name: predecessor_led
+      label: Predecessor-led
+      weight_overrides:
+        ANCHOR_DIRECT: 0.45
+        ANCHOR_SAME_BRAND: 0.20
+        COMPETITOR_ASIN: 0.35
 
 excel:
   sheet_name: 销量

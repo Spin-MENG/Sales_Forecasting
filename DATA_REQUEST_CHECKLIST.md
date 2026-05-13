@@ -182,6 +182,7 @@ manual_estimate
 | 自定义 Bass 参数 | 新品扩散节奏明显不同于 BE7200 |
 | 自定义 Seasonal / Pulse | 品类季节性或促销节奏不同 |
 | 已知营销节点 | 需要解释某些月份的峰值或低谷 |
+| 多情境权重 | 想在同一个 HTML 中比较 balanced-auto / competitor-pressure / predecessor-led |
 
 DE CSV 格式：
 
@@ -209,6 +210,7 @@ M,cal,V1_low,V1_mid,V1_high,V2_low,V2_mid,V2_high,V3_low,V3_mid,V3_high
 - 默认使用 hybrid_de，不要要求我先提供 DE 预测 CSV。
 - 先检查资料是否完整；缺关键数据就明确列出。
 - 生成本地 config 后运行工具。
+- 如果存在明确直系前代和竞品压力，请配置 scenarios，并在同一个 HTML 中展示三情境。
 - 不要提交真实数据、真实 config 或生成报告。
 - 最后汇总 DE 和全球非美的 Y1 / M18 / 峰值月 / P10-P50-P90。
 ```

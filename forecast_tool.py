@@ -4,6 +4,7 @@
 基于配置中的 DE 月度三档预测，按锚点产品的 "DE / 非美全球" 销售占比反推。
 """
 import argparse
+import copy
 import sys
 from pathlib import Path
 
@@ -33,6 +34,60 @@ def parse_args():
         help="YAML config path. Copy forecast_config_template.yaml and fill it before running.",
     )
     return parser.parse_args()
+
+
+def apply_de_scenario_config(config, scenario):
+    scenario_config = copy.deepcopy(config)
+    de_model = scenario_config.setdefault("de_forecast_model", {})
+    for key, value in (scenario.get("de_forecast_model") or {}).items():
+        if key == "steady_anchors":
+            continue
+        if isinstance(value, dict) and isinstance(de_model.get(key), dict):
+            de_model[key].update(value)
+        else:
+            de_model[key] = value
+
+    steady_weighting = scenario.get("steady_weighting")
+    if steady_weighting:
+        de_model["steady_weighting"] = copy.deepcopy(steady_weighting)
+
+    weight_overrides = scenario.get("weight_overrides") or {}
+    if weight_overrides:
+        de_model["steady_weighting"] = {"mode": "manual"}
+        for anchor in de_model.get("steady_anchors", []):
+            key = anchor.get("key")
+            if key in weight_overrides:
+                anchor["weight"] = weight_overrides[key]
+    return scenario_config
+
+
+def build_scenario_result(label, mode, de_forecast, diagnostics, mult_mid, mult_p10, mult_p50, mult_p90):
+    g_mid = [r["v2_mid"] * mult_mid for r in de_forecast]
+    g_p10 = [r["v2_mid"] * mult_p10 for r in de_forecast]
+    g_p50 = [r["v2_mid"] * mult_p50 for r in de_forecast]
+    g_p90 = [r["v2_mid"] * mult_p90 for r in de_forecast]
+    peak_idx = max(range(len(g_p50)), key=lambda i: g_p50[i])
+    return {
+        "label": label,
+        "mode": mode,
+        "months": [r["cal"] for r in de_forecast],
+        "month_labels": [f"M{r['M']}" for r in de_forecast],
+        "de_v2": [round(r["v2_mid"]) for r in de_forecast],
+        "p10": [round(v) for v in g_p10],
+        "p50": [round(v) for v in g_p50],
+        "p90": [round(v) for v in g_p90],
+        "steady_v2": round(diagnostics.get("steady", {}).get("v2", 0)),
+        "de_y1": round(sum(r["v2_mid"] for r in de_forecast[:12])),
+        "de_m18": round(sum(r["v2_mid"] for r in de_forecast)),
+        "global_y1_p50": round(sum(g_p50[:12])),
+        "global_m18_p10": round(sum(g_p10)),
+        "global_m18_p50": round(sum(g_p50)),
+        "global_m18_p90": round(sum(g_p90)),
+        "peak_m": de_forecast[peak_idx]["M"],
+        "peak_cal": de_forecast[peak_idx]["cal"],
+        "peak_p50": round(g_p50[peak_idx]),
+        "contributions": diagnostics.get("contributions", []),
+    }
 
 def main():
     args = parse_args()
@@ -183,6 +238,35 @@ def main():
                 f"  {item['label']}: 近{de_diagnostics['recent_n']}月均={item['avg_recent']:.0f}, "
                 f"{weight_text}, factor={item['v2_factor']:.2f}, 贡献={item['v2_contribution']:.1f}"
             )
+    scenario_results = []
+    if DE_FORECAST_MODE == "hybrid_de":
+        scenario_configs = CONFIG.get("de_forecast_model", {}).get("scenarios") or []
+        for scenario in scenario_configs:
+            scenario_label = scenario.get("label") or scenario.get("name") or "Scenario"
+            scenario_config = apply_de_scenario_config(CONFIG, scenario)
+            scenario_forecast, scenario_diagnostics = generate_hybrid_de_forecast(
+                scenario_config,
+                TARGET_PRODUCT,
+                resolve_path,
+            )
+            scenario_results.append(build_scenario_result(
+                scenario_label,
+                scenario_diagnostics.get("weighting_mode"),
+                scenario_forecast,
+                scenario_diagnostics,
+                mult_mid,
+                mult_p10,
+                mult_p50,
+                mult_p90,
+            ))
+        if scenario_results:
+            print("\nDE 稳态情境对比:")
+            for item in scenario_results:
+                print(
+                    f"  {item['label']}: mode={item['mode']}, "
+                    f"steady V2={item['steady_v2']:,}, DE M18={item['de_m18']:,}, "
+                    f"全球非美 M18 P50={item['global_m18_p50']:,}"
+                )
     
     print(f"读取 {len(de_forecast)} 行 {CONFIG['forecast'].get('de_source_label', 'DE input')} DE 月度预测")
     print(f"  V2_mid Y1 = {sum(r['v2_mid'] for r in de_forecast[:12]):,.0f}")
@@ -253,6 +337,7 @@ def main():
         high_share_point=high_share_point,
         output_paths=output_paths,
         de_source_label=de_source_label,
+        scenario_results=scenario_results,
     )
     
     print("\n" + "="*70)

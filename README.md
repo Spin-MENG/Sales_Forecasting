@@ -84,6 +84,14 @@ Steady(v) = Σ auto_weight(i) × recent_avg(i) × factor(i, v)
 
 默认 `de_forecast_model.steady_weighting.mode=auto`，工具会自动计算 `auto_weight`。如果要完全复现某个历史模型里的人工权重，可以改成 `mode=manual` 并填写每个锚点的 `weight`。
 
+可以在 `de_forecast_model.scenarios` 里保留多个情境。工具会在同一个 interactive HTML 里展示多条曲线和对比表，例如：
+
+| 情境 | 用途 |
+|---|---|
+| Balanced auto | 通用自动权重基线 |
+| Competitor pressure | 提高竞品权重，作为保守压力测试 |
+| Predecessor-led | 提高直系前代权重，适合明确替代关系的新品 |
+
 再用 BE7200 v5.14 方法论里的 Bass、Opening、Seasonal、Pulse 生成 M1-M18 的 DE 月度三档。
 
 ### 3. 全球区域锚点销量 Excel
@@ -235,6 +243,7 @@ be10000_global_ex_us_interactive_v1_0.html
 7. 最后总结：
    - DE V1/V2/V3 的 Y1、M18、峰值月
    - 全球非美 P10/P50/P90 的 Y1、M18、峰值月
+   - 如果配置了 scenarios，请说明 Balanced auto / Competitor pressure / Predecessor-led 的差异
    - 使用了哪些 DE 稳态锚点和全球区域锚点
    - 输出文件路径
 8. 不要 commit 真实 Excel、CSV、state JSON、config 或生成报告。
